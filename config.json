@@ -1,0 +1,14 @@
+{
+    "api_id": "23697291",
+    "api_hash": "b3a10e33ef507e864ed7018df0495ca8",
+    "bot_token": "7626841974:AAEBhQ4Cia9aTUz7zEHheVKh9O0Fqu_7JqA",
+    "input_dir": "images/input",
+    "mask_dir": "images/masks",
+    "output_dir": "images/output",
+    "mask_x": -300,
+    "mask_y": -60,
+    "mask_width": 300,
+    "mask_height": 60,
+    "max_retries": 3,
+    "retry_delay": 5
+}
