@@ -4,9 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from PIL import Image
 import cv2
-import requests
+import numpy as np
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait, RPCError
@@ -30,8 +29,6 @@ DEFAULT_CONFIG = {
     "api_id": "YOUR_API_ID",
     "api_hash": "YOUR_API_HASH",
     "bot_token": "YOUR_BOT_TOKEN",
-    "source_chat_id": -1001234567890,  # Source channel/chat ID
-    "target_chat_id": -1009876543210,  # Target channel ID
     "input_dir": "images/input",
     "mask_dir": "images/masks",
     "output_dir": "images/output",
@@ -39,7 +36,6 @@ DEFAULT_CONFIG = {
     "mask_y": -60,   # Bottom-right corner (relative to height)
     "mask_width": 300,
     "mask_height": 60,
-    "allowed_chats": [-1001234567890],  # Optional: restrict to specific chats
     "max_retries": 3,
     "retry_delay": 5
 }
@@ -149,22 +145,24 @@ def remove_watermark(input_path: str, mask_path: str, output_path: str, retry_co
         logger.error(f"Max retries reached for IOPaint: {e}")
         return None
 
-async def forward_image(output_path: str):
-    """Forward the cleaned image to the target channel."""
+async def send_cleaned_image(chat_id: int, output_path: str, message: Message):
+    """Send the cleaned image back to the user."""
     try:
-        await app.send_photo(config["target_chat_id"], output_path)
-        logger.info(f"Forwarded cleaned image to chat {config['target_chat_id']}")
+        await app.send_photo(chat_id, output_path, reply_to_message_id=message.id)
+        logger.info(f"Sent cleaned image to chat {chat_id}")
     except Exception as e:
-        logger.error(f"Failed to forward image: {e}")
+        logger.error(f"Failed to send cleaned image: {e}")
+        await message.reply("Sorry, I couldn't send the cleaned image. Please try again later.")
 
-@app.on_message(filters.photo & filters.chat(config["allowed_chats"]))
+@app.on_message(filters.photo)
 async def handle_image(client: Client, message: Message):
-    """Handle incoming image messages."""
+    """Handle incoming image messages sent to the bot."""
     logger.info(f"Received image from chat {message.chat.id}, message ID {message.id}")
     
     # Download image
     input_path = await download_image(message)
     if not input_path:
+        await message.reply("Failed to download the image. Please try again.")
         return
     
     # Create mask
@@ -172,6 +170,7 @@ async def handle_image(client: Client, message: Message):
     mask_path = os.path.join(config["mask_dir"], mask_file)
     mask_path = create_mask(input_path, mask_path)
     if not mask_path:
+        await message.reply("Failed to create the mask. Please try again.")
         return
     
     # Remove watermark
@@ -179,16 +178,17 @@ async def handle_image(client: Client, message: Message):
     output_path = os.path.join(config["output_dir"], output_file)
     output_path = remove_watermark(input_path, mask_path, output_path)
     if not output_path:
+        await message.reply("Failed to remove the watermark. Please try again.")
         return
     
-    # Forward cleaned image
-    await forward_image(output_path)
+    # Send cleaned image back
+    await send_cleaned_image(message.chat.id, output_path, message)
 
 @app.on_message(filters.command("ping"))
-async def ping_command(client: Client, message: Message):
+async def handle_ping(client: Client, message: Message):
     """Respond to /ping command."""
     await message.reply("Pong! Bot is running.")
-    logger.info(f"Ping command received from user {message.from_user.id}")
+    logger.info(f"Ping command received from user {message.from_user.id if message.from_user else 'unknown'}")
 
 async def main():
     """Start the bot."""
